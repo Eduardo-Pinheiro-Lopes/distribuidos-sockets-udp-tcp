@@ -1,0 +1,48 @@
+import socket
+import random
+import argparse
+
+def evaluate_calc(op1, op_str, op2):
+    try:
+        val1, val2 = float(op1), float(op2)
+        if op_str == '+': return True, val1 + val2
+        elif op_str == '-': return True, val1 - val2
+        elif op_str == '*': return True, val1 * val2
+        elif op_str == '/':
+            if val2 == 0:
+                return False, "divisao por zero"
+            return True, val1 / val2
+        else:
+            return False, f"operacao invalida: {op_str}"
+    except ValueError:
+        return False, "operandos invalidos"
+
+def start_udp_server(host='127.0.0.1', port=5000, loss_rate=0.0):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((host, port))
+    print(f"[UDP Server] Rodando em {host}:{port} | Taxa de perda simulada: {loss_rate * 100}%")
+
+    while True:
+        data, addr = sock.recvfrom(1024)
+        
+        # Simulação de perda de pacote
+        if random.random() < loss_rate:
+            print(f"[UDP Server] Pacote simulado como PERDIDO de {addr}")
+            continue
+
+        msg = data.decode('utf-8').strip()
+        parts = msg.split(':')
+
+        if len(parts) == 5 and parts[0] == 'CALC':
+            _, seq, op1, op, op2 = parts
+            success, res = evaluate_calc(op1, op, op2)
+            resp = f"RESULT:{seq}:{res}" if success else f"ERROR:{seq}:{res}"
+            sock.sendto(resp.encode('utf-8'), addr)
+            print(f"[UDP Server] Respondido seq {seq} para {addr}")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--loss-rate', type=float, default=0.0, help='Taxa de perda (ex: 0.1 para 10%)')
+    parser.add_argument('--port', type=int, default=5000)
+    args = parser.parse_args()
+    start_udp_server(port=args.port, loss_rate=args.loss_rate)

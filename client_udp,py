@@ -1,0 +1,68 @@
+import socket
+import time
+import random
+
+HOST = '127.0.0.1'
+PORT = 5000
+N_REQUESTS = 20
+TIMEOUT = 0.5  # 500 ms
+MAX_RETRIES = 5
+OPS = ['+', '-', '*', '/']
+
+def run_udp_client():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(TIMEOUT)
+
+    rtts = []
+    total_retransmissions = 0
+    lost_definitively = 0
+
+    start_total_time = time.time()
+
+    for seq in range(N_REQUESTS):
+        op1 = round(random.uniform(1, 100), 1)
+        op2 = round(random.uniform(0, 10), 1) if random.random() > 0.2 else 0  # Força alguns zeros
+        op = random.choice(OPS)
+
+        payload = f"CALC:{seq}:{op1}:{op}:{op2}"
+        
+        retransmissions = 0
+        success = False
+        start_rtt = time.time()
+
+        while retransmissions <= MAX_RETRIES:
+            try:
+                sock.sendto(payload.encode('utf-8'), (HOST, PORT))
+                data, _ = sock.recvfrom(1024)
+                end_rtt = time.time()
+                
+                rtt = (end_rtt - start_rtt) * 1000  # em milissegundos
+                rtts.append(rtt)
+                success = True
+                resp = data.decode('utf-8')
+                print(f"[Seq {seq}] Resp: {resp} | RTT: {rtt:.2f} ms | Retentativas: {retransmissions}")
+                break
+            except socket.timeout:
+                retransmissions += 1
+                total_retransmissions += 1
+                print(f"[Seq {seq}] Timeout! Retentativa {retransmissions}/{MAX_RETRIES}...")
+
+        if not success:
+            lost_definitively += 1
+            print(f"[Seq {seq}] PERDIDA DEFINITIVAMENTE após {MAX_RETRIES} retentativas.")
+
+    total_time = time.time() - start_total_time
+    sock.close()
+
+    avg_rtt = sum(rtts) / len(rtts) if rtts else 0
+    max_rtt = max(rtts) if rtts else 0
+
+    print("\n--- ESTATÍSTICAS (UDP) ---")
+    print(f"Tempo total: {total_time:.2f} s")
+    print(f"RTT Médio: {avg_rtt:.2f} ms")
+    print(f"RTT Máximo: {max_rtt:.2f} ms")
+    print(f"Total de retransmissões: {total_retransmissions}")
+    print(f"Requisições perdidas definitivamente: {lost_definitively}")
+
+if __name__ == '__main__':
+    run_udp_client()
